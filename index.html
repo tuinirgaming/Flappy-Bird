@@ -32,25 +32,26 @@
             const canvasRef = useRef(null);
             const [gameState, setGameState] = useState('menu'); // menu, playing, gameOver, settings
             const [score, setScore] = useState(0);
+            const [finalScore, setFinalScore] = useState(0);
             const [highScore, setHighScore] = useState(0);
             const [difficulty, setDifficulty] = useState('medium');
             const [birdSpeed, setBirdSpeed] = useState('normal');
             const gameLoopRef = useRef(null);
 
-            // Difficulty settings
+            // Difficulty settings with point multipliers
             const difficultySettings = {
-                easy: { pipeGap: 200, pipeSpeed: 2, pipeFrequency: 150 },
-                medium: { pipeGap: 150, pipeSpeed: 3, pipeFrequency: 120 },
-                hard: { pipeGap: 120, pipeSpeed: 4, pipeFrequency: 100 },
-                extreme: { pipeGap: 100, pipeSpeed: 5, pipeFrequency: 80 }
+                easy: { pipeGap: 200, pipeSpeed: 2, pipeFrequency: 150, multiplier: 0.5 },
+                medium: { pipeGap: 150, pipeSpeed: 3, pipeFrequency: 120, multiplier: 1 },
+                hard: { pipeGap: 120, pipeSpeed: 4, pipeFrequency: 100, multiplier: 1.5 },
+                extreme: { pipeGap: 100, pipeSpeed: 5, pipeFrequency: 80, multiplier: 2 }
             };
 
-            // Bird speed settings
+            // Bird speed settings with point multipliers
             const birdSpeedSettings = {
-                slow: { gravity: 0.4, jumpStrength: -7 },
-                normal: { gravity: 0.5, jumpStrength: -8 },
-                fast: { gravity: 0.6, jumpStrength: -9 },
-                turbo: { gravity: 0.7, jumpStrength: -10 }
+                slow: { gravity: 0.4, jumpStrength: -7, multiplier: 0.5 },
+                normal: { gravity: 0.5, jumpStrength: -8, multiplier: 1 },
+                fast: { gravity: 0.6, jumpStrength: -9, multiplier: 1.5 },
+                turbo: { gravity: 0.7, jumpStrength: -10, multiplier: 2 }
             };
 
             // Load high score on mount
@@ -62,7 +63,7 @@
                 try {
                     const result = await window.storage.get('flappybird_highscore');
                     if (result && result.value) {
-                        setHighScore(parseInt(result.value));
+                        setHighScore(parseFloat(result.value));
                     }
                 } catch (error) {
                     console.log('No high score found yet');
@@ -132,6 +133,7 @@
                     frameCount = 0;
                     currentScore = 0;
                     setScore(0);
+                    setFinalScore(0);
                     setGameState('playing');
                 };
 
@@ -243,10 +245,11 @@
                     for (let i = pipes.length - 1; i >= 0; i--) {
                         pipes[i].x -= settings.pipeSpeed;
 
-                        // Score point
+                        // Score point with multiplier
                         if (!pipes[i].scored && pipes[i].x + pipes[i].width < bird.x) {
                             pipes[i].scored = true;
-                            currentScore++;
+                            const pointMultiplier = settings.multiplier * speedSettings.multiplier;
+                            currentScore += pointMultiplier;
                             setScore(currentScore);
                         }
 
@@ -258,6 +261,7 @@
 
                     // Check collision
                     if (checkCollision()) {
+                        setFinalScore(currentScore);
                         setGameState('gameOver');
                         if (currentScore > highScore) {
                             setHighScore(currentScore);
@@ -305,8 +309,9 @@
                     ctx.lineWidth = 3;
                     ctx.font = 'bold 36px Arial';
                     ctx.textAlign = 'center';
-                    ctx.strokeText(currentScore, canvas.width / 2, 50);
-                    ctx.fillText(currentScore, canvas.width / 2, 50);
+                    const displayScore = (Math.floor(currentScore * 10) / 10).toFixed(1);
+                    ctx.strokeText(displayScore, canvas.width / 2, 50);
+                    ctx.fillText(displayScore, canvas.width / 2, 50);
                 };
 
                 const drawMenu = () => {
@@ -330,8 +335,9 @@
                     
                     // High Score
                     ctx.font = 'bold 24px Arial';
-                    ctx.strokeText(`High Score: ${highScore}`, canvas.width / 2, 400);
-                    ctx.fillText(`High Score: ${highScore}`, canvas.width / 2, 400);
+                    const displayHighScore = Math.floor(highScore * 10) / 10;
+                    ctx.strokeText(`High Score: ${displayHighScore.toFixed(1)}`, canvas.width / 2, 400);
+                    ctx.fillText(`High Score: ${displayHighScore.toFixed(1)}`, canvas.width / 2, 400);
 
                     drawBird();
                 };
@@ -352,16 +358,18 @@
                     ctx.strokeText('Game Over', canvas.width / 2, 200);
                     ctx.fillText('Game Over', canvas.width / 2, 200);
                     
-                    // Score
+                    // Score - use the saved finalScore from React state
+                    const displayScore = (Math.floor(finalScore * 10) / 10).toFixed(1);
                     ctx.fillStyle = 'white';
                     ctx.font = 'bold 28px Arial';
-                    ctx.strokeText(`Score: ${currentScore}`, canvas.width / 2, 280);
-                    ctx.fillText(`Score: ${currentScore}`, canvas.width / 2, 280);
+                    ctx.strokeText(`Score: ${displayScore}`, canvas.width / 2, 280);
+                    ctx.fillText(`Score: ${displayScore}`, canvas.width / 2, 280);
                     
                     // High Score
+                    const displayHighScore = (Math.floor(highScore * 10) / 10).toFixed(1);
                     ctx.fillStyle = '#FFD700';
-                    ctx.strokeText(`Best: ${highScore}`, canvas.width / 2, 330);
-                    ctx.fillText(`Best: ${highScore}`, canvas.width / 2, 330);
+                    ctx.strokeText(`Best: ${displayHighScore}`, canvas.width / 2, 330);
+                    ctx.fillText(`Best: ${displayHighScore}`, canvas.width / 2, 330);
                     
                     // Restart
                     ctx.fillStyle = 'white';
@@ -403,11 +411,20 @@
                                 <div className="grid grid-cols-2 gap-4 mb-4">
                                     <div className="text-center">
                                         <div className="text-sm text-gray-600">Score</div>
-                                        <div className="text-2xl font-bold text-blue-600">{score}</div>
+                                        <div className="text-2xl font-bold text-blue-600">
+                                            {gameState === 'gameOver' ? (Math.floor(finalScore * 10) / 10).toFixed(1) : (Math.floor(score * 10) / 10).toFixed(1)}
+                                        </div>
                                     </div>
                                     <div className="text-center">
                                         <div className="text-sm text-gray-600">High Score</div>
-                                        <div className="text-2xl font-bold text-yellow-600">{highScore}</div>
+                                        <div className="text-2xl font-bold text-yellow-600">{(Math.floor(highScore * 10) / 10).toFixed(1)}</div>
+                                    </div>
+                                </div>
+                                <div className="mb-4 text-center text-sm text-gray-600">
+                                    <div className="font-semibold">Point Multiplier: {(difficultySettings[difficulty].multiplier * birdSpeedSettings[birdSpeed].multiplier).toFixed(2)}x</div>
+                                    <div className="text-xs mt-1">
+                                        Difficulty: {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} ({difficultySettings[difficulty].multiplier}x) • 
+                                        Speed: {birdSpeed.charAt(0).toUpperCase() + birdSpeed.slice(1)} ({birdSpeedSettings[birdSpeed].multiplier}x)
                                     </div>
                                 </div>
                                 <button
